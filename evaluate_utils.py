@@ -81,7 +81,7 @@ class EvalLM(BaseLM):
         logits returned from the model
         """
         with torch.no_grad():
-            return self.model(inps)[0][:, :, :50257]
+            return self.model(inps)[0]
 
     def _model_generate(self, context, max_length, eos_token_id):
         return self.model.generate(context, max_length=max_length, eos_token_id=eos_token_id, do_sample=False)

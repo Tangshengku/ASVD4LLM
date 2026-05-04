@@ -10,6 +10,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from modules.svd_linear import SVDLinear
+from model_utils import get_decoder_layers
 
 DEBUG = False
 
@@ -157,10 +158,7 @@ def find_layers(module, layers=[nn.Conv2d, nn.Linear], name=""):
 def rtn_quant_sequential(model, wbits):
     print("Starting ...")
 
-    if "opt" in model.config._name_or_path:
-        layers = model.model.decoder.layers
-    elif "llama" in model.config._name_or_path:
-        layers = model.model.layers
+    layers = get_decoder_layers(model)
     for i in range(len(layers)):
         layer = layers[i].to(model.device)
         subset = find_layers(layer)
