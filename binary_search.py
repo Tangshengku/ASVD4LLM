@@ -77,7 +77,7 @@ def binary_search_truncation_rank(model, sensitivity_dict, calib_loader, args):
                 setattr(info["father"], info["name"], svd_linear)
                 tot_params += raw_linear.weight.numel()
                 compress_params += raw_linear.weight.numel() * param_ratio
-            ppl = evaluate_perplexity(model, input_ids, args.n_calib_samples)
+            ppl = evaluate_perplexity(model, input_ids, args.n_calib_samples, batch_size=args.ppl_eval_batch_size)
             param_ratio = compress_params / tot_params
             msg = f"low={low} mid={mid}, high={high}, ppl={ppl}, param_ratio={param_ratio}"
             print(msg)
@@ -182,7 +182,7 @@ def binary_search_truncation_rank_optimize_scale(model, sensitivity_dict, calib_
                 setattr(info["father"], info["name"], svd_linear)
                 tot_params += raw_linear.weight.numel()
                 compress_params += raw_linear.weight.numel() * ratio
-            ppl = evaluate_perplexity(model, input_ids, args.n_calib_samples)
+            ppl = evaluate_perplexity(model, input_ids, args.n_calib_samples, batch_size=args.ppl_eval_batch_size)
             param_ratio = compress_params / tot_params
             msg = f"low={low} mid={mid}, high={high}, ppl={ppl}, param_ratio={param_ratio}"
             print(msg)

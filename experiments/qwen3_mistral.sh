@@ -5,7 +5,8 @@ CUDA_VISIBLE_DEVICES='4' python asvd.py \
   --model_id="Qwen/Qwen3-8B" \
   --act_aware \
   --alpha 0.5 \
-  --n_calib_samples 1024 \
+  --n_calib_samples 32 \
+  --ppl_eval_batch_size 8 \
   --calib_dataset wikitext2_evol-codealpaca_tulu-math \
   --scaling_method abs_mean \
   --param_ratio_target 0.8 \
@@ -20,6 +21,7 @@ CUDA_VISIBLE_DEVICES='4' python asvd.py \
   --act_aware \
   --alpha 0.5 \
   --n_calib_samples 32 \
+  --ppl_eval_batch_size 8 \
   --calib_dataset wikitext2_evol-codealpaca_tulu-math \
   --scaling_method abs_mean \
   --param_ratio_target 0.9 \

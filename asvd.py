@@ -120,6 +120,12 @@ if __name__ == "__main__":
         help="number of samples used for calibration",
     )
     parser.add_argument(
+        "--ppl_eval_batch_size",
+        type=int,
+        default=1,
+        help="batch size for calibration perplexity evaluation",
+    )
+    parser.add_argument(
         "--calib_dataset",
         type=str,
         default="wikitext2",

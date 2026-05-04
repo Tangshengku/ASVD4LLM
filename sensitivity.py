@@ -81,7 +81,7 @@ def calib_sensitivity_ppl(model, calib_loader, args, use_cache=True):
             )
             setattr(info["father"], info["name"], svd_linear)
 
-            ppl = evaluate_perplexity(model, input_ids, args.n_calib_samples)
+            ppl = evaluate_perplexity(model, input_ids, args.n_calib_samples, batch_size=args.ppl_eval_batch_size)
             sensitivity_dict[info["full_name"]][param_ratio] = ppl
             print(f"{info['full_name']} {param_ratio} {ppl}")
             pbar.update(1)
