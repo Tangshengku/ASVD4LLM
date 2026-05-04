@@ -8,6 +8,7 @@ from act_aware_utils import calib_input_distribution, calib_fisher_info
 from sensitivity import calib_sensitivity_ppl, calib_sensitivity_stable_rank
 from quantization import rtn_quant_sequential, awq_quant_sequential
 from binary_search import binary_search_truncation_rank
+from save_utils import save_asvd_hf
 import numpy as np
 
 
@@ -57,22 +58,26 @@ def main(args):
             elif args.weight_quant == "awq_int4":
                 model = awq_quant_sequential(model, tokenizer, 4)
 
+    if args.save_model:
+        save_asvd_hf(model, tokenizer, args.save_model)
+
     # evaluate
-    result = evaluate_model(
-        model,
-        tokenizer,
-        args.model_id,
-        "mmlu" if args.eval_mmlu else args.eval_tasks,
-        eval_ppl=args.eval_ppl,
-        limit=-1,
-        use_bos=args.use_bos,
-    )
-    print(result)
-    if not os.path.exists("output"):
-        os.makedirs("output")
-    with open("output/result.txt", "a+") as f:
-        f.write(f"{args}\n")
-        f.write(f"{result}\n")
+    if not args.skip_eval:
+        result = evaluate_model(
+            model,
+            tokenizer,
+            args.model_id,
+            "mmlu" if args.eval_mmlu else args.eval_tasks,
+            eval_ppl=args.eval_ppl,
+            limit=-1,
+            use_bos=args.use_bos,
+        )
+        print(result)
+        if not os.path.exists("output"):
+            os.makedirs("output")
+        with open("output/result.txt", "a+") as f:
+            f.write(f"{args}\n")
+            f.write(f"{result}\n")
 
     # finished
 
@@ -197,6 +202,17 @@ if __name__ == "__main__":
         "--use_bos",
         action="store_true",
         help="use bos token in calibration",
+    )
+    parser.add_argument(
+        "--save_model",
+        type=str,
+        default="",
+        help="save compressed model to this HF-style output directory",
+    )
+    parser.add_argument(
+        "--skip_eval",
+        action="store_true",
+        help="skip evaluation after compression",
     )
     args = parser.parse_args()
 

@@ -171,6 +171,23 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
+You can also save a compressed Mistral/Qwen model directly from `asvd.py`:
+```
+python asvd.py --model_id="Qwen/Qwen3-8B" --calib_dataset wikitext2_evol-codealpaca_tulu-math --act_aware --alpha 0.5 --n_calib_samples 32 --scaling_method abs_mean --param_ratio_target 0.9 --use_cache --use_bos --save_model output/Qwen3-8B-ASVD --skip_eval
+```
+
+Load the saved ASVD model with `trust_remote_code=True`:
+```python3
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model_id = "output/Qwen3-8B-ASVD"
+tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
+model = AutoModelForCausalLM.from_pretrained(
+    model_id, device_map="auto", torch_dtype=torch.float16, trust_remote_code=True
+)
+```
+
 # Citation
 
 Please cite our paper if you use ASVD.

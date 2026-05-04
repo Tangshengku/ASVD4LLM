@@ -10,7 +10,9 @@ CUDA_VISIBLE_DEVICES='0' python asvd.py \
   --scaling_method abs_mean \
   --param_ratio_target 0.9 \
   --use_cache \
-  --use_bos
+  --use_bos \
+  --save_model output/Qwen3-8B-ASVD \
+  --skip_eval
 
 # Mistral-7B ASVD
 CUDA_VISIBLE_DEVICES='1' python asvd.py \
@@ -22,4 +24,6 @@ CUDA_VISIBLE_DEVICES='1' python asvd.py \
   --scaling_method abs_mean \
   --param_ratio_target 0.9 \
   --use_cache \
-  --use_bos
+  --use_bos \
+  --save_model output/Mistral-7B-ASVD \
+  --skip_eval
