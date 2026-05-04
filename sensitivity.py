@@ -8,30 +8,31 @@ import numpy as np
 
 
 @torch.no_grad()
-def evaluate_perplexity(model, dataset, limit):
+def evaluate_perplexity(model, dataset, limit, batch_size=1):
     """
     dataset: input ids tensor of shape [batch, sequence length]
     """
     nsamples, seqlen = dataset.size()
+    batch_size = max(1, batch_size)
+    if limit > 0:
+        nsamples = min(nsamples, limit)
 
-    nlls = []
+    total_nll = torch.zeros((), device=model.device, dtype=torch.float32)
+    total_tokens = 0
 
-    for i in range(nsamples):
-        if i == limit:
-            break
-        input_ids = dataset[i : i + 1, :-1].to(model.device)
-        labels = dataset[i : i + 1, 1:].contiguous()
+    for i in range(0, nsamples, batch_size):
+        batch = dataset[i : min(i + batch_size, nsamples)]
+        input_ids = batch[:, :-1].to(model.device)
+        labels = batch[:, 1:].contiguous().to(model.device)
         logits = model(input_ids=input_ids)[0]
-        shift_logits = logits[:, :, :]
-        shift_labels = labels.to(model.device)
-        loss_fct = nn.CrossEntropyLoss()
-        loss = loss_fct(
-            shift_logits.view(-1, shift_logits.size(-1)),
-            shift_labels.view(-1),
+        loss_fct = nn.CrossEntropyLoss(reduction="sum")
+        neg_log_likelihood = loss_fct(
+            logits.reshape(-1, logits.size(-1)),
+            labels.reshape(-1),
         )
-        neg_log_likelihood = loss.float() * seqlen
-        nlls.append(neg_log_likelihood)
-    ppl = torch.exp(torch.stack(nlls).sum() / (len(nlls) * seqlen))
+        total_nll += neg_log_likelihood.float()
+        total_tokens += labels.numel()
+    ppl = torch.exp(total_nll / total_tokens)
     return ppl.item()
 
 
