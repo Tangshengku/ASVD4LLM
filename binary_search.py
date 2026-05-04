@@ -1,7 +1,7 @@
 import os
 import torch
 import torch.nn as nn
-from evaluate_utils import evaluate_model, evaluate_perplexity
+from sensitivity import  evaluate_perplexity
 from modules.svd_linear import SVDLinear, GradSVDLinear
 from tqdm import tqdm
 import time

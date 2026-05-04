@@ -2,9 +2,38 @@ import os
 import torch
 import torch.nn as nn
 from modules.svd_linear import SVDLinear
-from evaluate_utils import evaluate_model, evaluate_perplexity
+# from evaluate_utils import evaluate_perplexity
 from tqdm import tqdm
 import numpy as np
+
+
+@torch.no_grad()
+def evaluate_perplexity(model, dataset, limit):
+    """
+    dataset: input ids tensor of shape [batch, sequence length]
+    """
+    nsamples, seqlen = dataset.size()
+
+    nlls = []
+
+    for i in range(nsamples):
+        if i == limit:
+            break
+        input_ids = dataset[i : i + 1, :-1].to(model.device)
+        labels = dataset[i : i + 1, 1:].contiguous()
+        logits = model(input_ids=input_ids)[0]
+        shift_logits = logits[:, :, :]
+        shift_labels = labels.to(model.device)
+        loss_fct = nn.CrossEntropyLoss()
+        loss = loss_fct(
+            shift_logits.view(-1, shift_logits.size(-1)),
+            shift_labels.view(-1),
+        )
+        neg_log_likelihood = loss.float() * seqlen
+        nlls.append(neg_log_likelihood)
+    ppl = torch.exp(torch.stack(nlls).sum() / (len(nlls) * seqlen))
+    return ppl.item()
+
 
 
 @torch.no_grad()
