@@ -118,7 +118,7 @@ if __name__ == "__main__":
         "--calib_dataset",
         type=str,
         default="wikitext2",
-        choices=["wikitext2", "c4", "ptb", "alpaca", "selfgen"],
+        choices=["wikitext2", "c4", "ptb", "alpaca", "selfgen", "mixture", "wikitext2_evol-codealpaca_tulu-math"],
         help="calibration dataset",
     )
     parser.add_argument(
