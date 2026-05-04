@@ -139,10 +139,28 @@ def _format_tulu_math(example):
 def _tokenize_calib_text(tokenizer, text, seqlen, use_bos):
     if use_bos and tokenizer.bos_token is not None:
         text = tokenizer.bos_token + text
-    trainenc = tokenizer(text, return_tensors="pt")
-    inp = trainenc.input_ids[:, :seqlen]
-    attention_mask = torch.ones_like(inp)
+    pad_token_id = tokenizer.pad_token_id
+    if pad_token_id is None:
+        pad_token_id = tokenizer.eos_token_id
+    if pad_token_id is None:
+        pad_token_id = tokenizer.bos_token_id
+    if pad_token_id is None:
+        raise ValueError("tokenizer must define pad_token_id, eos_token_id, or bos_token_id for calibration padding")
+    trainenc = tokenizer(
+        text,
+        return_tensors="pt",
+        truncation=True,
+        max_length=seqlen,
+        padding="max_length",
+    )
+    inp = trainenc.input_ids
+    attention_mask = trainenc.attention_mask
+    inp = torch.where(attention_mask.bool(), inp, torch.full_like(inp, pad_token_id))
     return {"input_ids": inp, "attention_mask": attention_mask}
+
+
+def _has_fixed_calib_shape(traindataset, seqlen):
+    return all(_["input_ids"].size(1) == seqlen for _ in traindataset)
 
 
 def _sample_from_text_corpus(tot_text, tokenizer, seqlen, use_bos):
@@ -199,7 +217,9 @@ def get_calib_data(name, tokenizer, model_id, nsamples, seqlen=2048, seed=3, use
         os.makedirs("cache")
     if os.path.exists(cache_file):
         traindataset = torch.load(cache_file)
-        return traindataset
+        if _has_fixed_calib_shape(traindataset, seqlen):
+            return traindataset
+        print(f"cached calibration data has variable lengths; regenerating {cache_file}")
     random.seed(seed)
     set_seed(seed)
     if name in MIXTURE_CALIB_NAMES:
