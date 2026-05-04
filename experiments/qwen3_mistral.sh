@@ -1,7 +1,7 @@
 export TRANSFORMERS_CACHE=/nfs/scistore19/alistgrp/huggingface/hub
 
 # Qwen3-8B ASVD
-CUDA_VISIBLE_DEVICES='4' python asvd.py \
+CUDA_VISIBLE_DEVICES='0' python asvd.py \
   --model_id="Qwen/Qwen3-8B" \
   --act_aware \
   --alpha 0.5 \
@@ -16,7 +16,7 @@ CUDA_VISIBLE_DEVICES='4' python asvd.py \
   --skip_eval
 
 # Mistral-7B ASVD
-CUDA_VISIBLE_DEVICES='4' python asvd.py \
+CUDA_VISIBLE_DEVICES='0' python asvd.py \
   --model_id="mistralai/Mistral-7B-v0.1" \
   --act_aware \
   --alpha 0.5 \
