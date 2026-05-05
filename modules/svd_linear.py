@@ -4,6 +4,44 @@ import torch.nn.functional as F
 import numpy as np
 
 
+def _make_empty_like_linear(linear):
+    new_linear = nn.Linear(linear.in_features, linear.out_features, bias=linear.bias is not None)
+    new_linear = new_linear.to(linear.weight.dtype).to(linear.weight.device)
+    new_linear.weight.data.copy_(linear.weight.data)
+    if linear.bias is not None:
+        new_linear.bias.data.copy_(linear.bias.data)
+    return new_linear
+
+
+def _svd_lowrank_with_retries(w, rank):
+    max_rank = min(w.size())
+    rank = max(1, min(rank, max_rank))
+    candidates = []
+    for q in [rank, int(rank * 0.9), int(rank * 0.75), int(rank * 0.5)]:
+        q = max(1, min(q, max_rank))
+        if q not in candidates:
+            candidates.append(q)
+
+    w = torch.nan_to_num(w, nan=0.0, posinf=0.0, neginf=0.0)
+    last_error = None
+    for q in candidates:
+        try:
+            return torch.svd_lowrank(w, q=q)
+        except RuntimeError as exc:
+            last_error = exc
+            if w.is_cuda:
+                torch.cuda.empty_cache()
+
+    try:
+        U, S, Vh = torch.linalg.svd(w.cpu(), full_matrices=False)
+        q = candidates[-1]
+        return U[:, :q].to(w.device), S[:q].to(w.device), Vh[:q, :].t().to(w.device)
+    except RuntimeError as exc:
+        last_error = exc
+
+    raise last_error
+
+
 class SVDLinear(nn.Module):
     def __init__(self, U, S, V, bias=None, sigma_fuse="UV") -> None:
         super().__init__()
@@ -62,10 +100,10 @@ class SVDLinear(nn.Module):
         Ss = []
         Vs = []
         try:
-            U, S, V = torch.svd_lowrank(w, q=rank)
-        except:
-            print(f"svd failed for {linear}, disable act_aware")
-            return nn.Linear(linear.in_features, linear.out_features).to(linear.weight.dtype).to(linear.weight.device)
+            U, S, V = _svd_lowrank_with_retries(w, rank)
+        except RuntimeError as exc:
+            print(f"svd failed for {linear}, keep original linear. error={exc}")
+            return _make_empty_like_linear(linear)
         if act_aware:
             V = V / scaling_diag_matrix.view(-1, 1)
         Us = [U]
@@ -79,23 +117,17 @@ class SVDLinear(nn.Module):
 
         # nan or inf check
         for S in Ss:
-            if (S != S).any():
+            if not torch.isfinite(S).all():
                 print("nan in S")
-                return (
-                    nn.Linear(linear.in_features, linear.out_features).to(linear.weight.dtype).to(linear.weight.device)
-                )
+                return _make_empty_like_linear(linear)
         for U in Us:
-            if (U != U).any():
+            if not torch.isfinite(U).all():
                 print("nan in U")
-                return (
-                    nn.Linear(linear.in_features, linear.out_features).to(linear.weight.dtype).to(linear.weight.device)
-                )
+                return _make_empty_like_linear(linear)
         for V in Vs:
-            if (V != V).any():
+            if not torch.isfinite(V).all():
                 print("nan in V")
-                return (
-                    nn.Linear(linear.in_features, linear.out_features).to(linear.weight.dtype).to(linear.weight.device)
-                )
+                return _make_empty_like_linear(linear)
 
         assert len(Us) == len(Ss) == len(Vs) == 1
         new_linear = SVDLinear(Us[0], Ss[0], Vs[0], bias, sigma_fuse)

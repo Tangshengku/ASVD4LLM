@@ -151,11 +151,15 @@ def _tokenize_calib_text(tokenizer, text, seqlen, use_bos):
         return_tensors="pt",
         truncation=True,
         max_length=seqlen,
-        padding="max_length",
     )
     inp = trainenc.input_ids
     attention_mask = trainenc.attention_mask
-    inp = torch.where(attention_mask.bool(), inp, torch.full_like(inp, pad_token_id))
+    if inp.size(1) < seqlen:
+        pad_len = seqlen - inp.size(1)
+        padding = torch.full((inp.size(0), pad_len), pad_token_id, dtype=inp.dtype, device=inp.device)
+        mask_padding = torch.zeros((attention_mask.size(0), pad_len), dtype=attention_mask.dtype, device=attention_mask.device)
+        inp = torch.cat((inp, padding), dim=1)
+        attention_mask = torch.cat((attention_mask, mask_padding), dim=1)
     return {"input_ids": inp, "attention_mask": attention_mask}
 
 
