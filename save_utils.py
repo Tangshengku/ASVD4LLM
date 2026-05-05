@@ -105,8 +105,8 @@ def _collect_asvd_linear_info(model):
     for name, module in model.named_modules():
         if isinstance(module, SVDLinear):
             info[name] = {
-                "in_features": module.BLinear.in_features,
-                "out_features": module.ALinear.out_features,
+                "in_features": module.BLinear.weight.size(1),
+                "out_features": module.ALinear.weight.size(0),
                 "rank": module.truncation_rank,
                 "bias": module.ALinear.bias is not None,
             }
@@ -122,14 +122,15 @@ def _set_module(root, name, module):
 
 
 def _svd_linear_to_dense(module):
+    dense_weight = module.ALinear.weight @ module.BLinear.weight
     dense = nn.Linear(
-        module.BLinear.in_features,
-        module.ALinear.out_features,
+        dense_weight.size(1),
+        dense_weight.size(0),
         bias=module.ALinear.bias is not None,
     )
-    dense = dense.to(device=module.ALinear.weight.device, dtype=module.ALinear.weight.dtype)
+    dense = dense.to(device=dense_weight.device, dtype=dense_weight.dtype)
     with torch.no_grad():
-        dense.weight.copy_(module.ALinear.weight @ module.BLinear.weight)
+        dense.weight.copy_(dense_weight)
         if module.ALinear.bias is not None:
             dense.bias.copy_(module.ALinear.bias)
     return dense
