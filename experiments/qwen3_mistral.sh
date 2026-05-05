@@ -13,7 +13,9 @@ CUDA_VISIBLE_DEVICES='0' python asvd.py \
   --use_cache \
   --use_bos \
   --save_model output/Qwen3-8B-ASVD \
-  --skip_eval
+  --eval_ppl wikitext2 \
+  --eval_ppl_fraction 0.02 \
+  --eval_batch_size 1
 
 # Mistral-7B ASVD
 CUDA_VISIBLE_DEVICES='0' python asvd.py \
@@ -28,4 +30,6 @@ CUDA_VISIBLE_DEVICES='0' python asvd.py \
   --use_cache \
   --use_bos \
   --save_model output/Mistral-7B-ASVD \
-  --skip_eval
+  --eval_ppl wikitext2 \
+  --eval_ppl_fraction 0.02 \
+  --eval_batch_size 1

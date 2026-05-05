@@ -2,7 +2,7 @@ import argparse
 import torch
 import os
 from transformers import AutoModelForCausalLM, AutoTokenizer
-# from evaluate_utils import evaluate_model
+from evaluate_utils import evaluate_model
 from datautils import get_calib_data
 from act_aware_utils import calib_input_distribution, calib_fisher_info
 from sensitivity import calib_sensitivity_ppl, calib_sensitivity_stable_rank
@@ -59,7 +59,7 @@ def main(args):
                 model = awq_quant_sequential(model, tokenizer, 4)
 
     if args.save_model:
-        save_asvd_hf(model, tokenizer, args.save_model)
+        save_asvd_hf(model, tokenizer, args.save_model, dense=not args.save_asvd_format)
 
     # evaluate
     if not args.skip_eval:
@@ -69,8 +69,10 @@ def main(args):
             args.model_id,
             "mmlu" if args.eval_mmlu else args.eval_tasks,
             eval_ppl=args.eval_ppl,
-            limit=-1,
+            limit=args.eval_limit,
+            batch_size=args.eval_batch_size,
             use_bos=args.use_bos,
+            eval_ppl_fraction=args.eval_ppl_fraction,
         )
         print(result)
         if not os.path.exists("output"):
@@ -168,6 +170,24 @@ if __name__ == "__main__":
         default="wikitext2,ptb",
         type=str,
     )
+    parser.add_argument(
+        "--eval_ppl_fraction",
+        type=float,
+        default=1.0,
+        help="fraction of PPL chunks to evaluate, e.g. 0.02 for a quick smoke eval",
+    )
+    parser.add_argument(
+        "--eval_limit",
+        type=int,
+        default=-1,
+        help="maximum number of eval chunks or lm-eval examples; -1 means no explicit limit",
+    )
+    parser.add_argument(
+        "--eval_batch_size",
+        type=int,
+        default=1,
+        help="batch size for final evaluation",
+    )
     parser.add_argument("--eval_tasks", type=str, default="")
     parser.add_argument(
         "--sigma_fuse",
@@ -213,7 +233,12 @@ if __name__ == "__main__":
         "--save_model",
         type=str,
         default="",
-        help="save compressed model to this HF-style output directory",
+        help="save compressed model to this HF-style output directory; SVD layers are densified by default",
+    )
+    parser.add_argument(
+        "--save_asvd_format",
+        action="store_true",
+        help="save custom ASVD modules instead of densifying to standard HF Linear weights",
     )
     parser.add_argument(
         "--skip_eval",

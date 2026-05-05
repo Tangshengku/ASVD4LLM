@@ -1,5 +1,8 @@
 import os
 
+import torch
+import torch.nn as nn
+
 from modules.svd_linear import SVDLinear
 
 
@@ -110,7 +113,53 @@ def _collect_asvd_linear_info(model):
     return info
 
 
-def save_asvd_hf(model, tokenizer, output_dir):
+def _set_module(root, name, module):
+    parts = name.split(".")
+    parent = root
+    for part in parts[:-1]:
+        parent = getattr(parent, part)
+    setattr(parent, parts[-1], module)
+
+
+def _svd_linear_to_dense(module):
+    dense = nn.Linear(
+        module.BLinear.in_features,
+        module.ALinear.out_features,
+        bias=module.ALinear.bias is not None,
+    )
+    dense = dense.to(device=module.ALinear.weight.device, dtype=module.ALinear.weight.dtype)
+    with torch.no_grad():
+        dense.weight.copy_(module.ALinear.weight @ module.BLinear.weight)
+        if module.ALinear.bias is not None:
+            dense.bias.copy_(module.ALinear.bias)
+    return dense
+
+
+def densify_svd_linears(model):
+    svd_names = [name for name, module in model.named_modules() if isinstance(module, SVDLinear)]
+    for name in svd_names:
+        module = model.get_submodule(name)
+        _set_module(model, name, _svd_linear_to_dense(module))
+    return len(svd_names)
+
+
+def _save_dense_hf(model, tokenizer, output_dir):
+    n_densified = densify_svd_linears(model)
+
+    for attr in ("asvd_linear_info", "auto_map"):
+        if hasattr(model.config, attr):
+            delattr(model.config, attr)
+
+    tokenizer.save_pretrained(output_dir)
+    try:
+        model.save_pretrained(output_dir, safe_serialization=True)
+    except TypeError:
+        model.save_pretrained(output_dir)
+
+    print(f"Saved dense HF model to {output_dir} (densified {n_densified} SVDLinear modules)")
+
+
+def _save_asvd_custom_hf(model, tokenizer, output_dir):
     os.makedirs(output_dir, exist_ok=True)
 
     asvd_linear_info = _collect_asvd_linear_info(model)
@@ -132,3 +181,11 @@ def save_asvd_hf(model, tokenizer, output_dir):
         model.save_pretrained(output_dir)
 
     print(f"Saved HF-style ASVD model to {output_dir}")
+
+
+def save_asvd_hf(model, tokenizer, output_dir, dense=True):
+    os.makedirs(output_dir, exist_ok=True)
+    if dense:
+        _save_dense_hf(model, tokenizer, output_dir)
+    else:
+        _save_asvd_custom_hf(model, tokenizer, output_dir)

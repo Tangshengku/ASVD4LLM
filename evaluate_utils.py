@@ -4,14 +4,9 @@ from tqdm import tqdm
 import os
 
 from datautils import get_eval_loaders
-from lm_eval.base import BaseLM
-from lm_eval import evaluator
-from datasets import load_dataset
-import time
-import re
 
 
-class EvalLM(BaseLM):
+class EvalLM:
     def __init__(
         self,
         model,
@@ -87,6 +82,23 @@ class EvalLM(BaseLM):
         return self.model.generate(context, max_length=max_length, eos_token_id=eos_token_id, do_sample=False)
 
 
+def _load_lm_eval():
+    try:
+        from lm_eval.base import BaseLM
+        from lm_eval import evaluator
+    except ImportError:
+        from lm_eval.api.model import LM as BaseLM
+        from lm_eval import evaluator
+    return BaseLM, evaluator
+
+
+def _make_lm_eval_wrapper():
+    BaseLM, _ = _load_lm_eval()
+    if issubclass(EvalLM, BaseLM):
+        return EvalLM
+    return type("HarnessEvalLM", (EvalLM, BaseLM), {})
+
+
 @torch.no_grad()
 def evaluate_perplexity(model, dataset, limit, batch_size=1):
     """
@@ -127,6 +139,7 @@ def evaluate_model(
     limit=-1,
     batch_size=1,
     use_bos=False,
+    eval_ppl_fraction=1.0,
 ):
     """
     model: model name
@@ -139,6 +152,9 @@ def evaluate_model(
     results = {}
     if eval_ppl:
         for dataset in eval_ppl.split(","):
+            dataset = dataset.strip()
+            if not dataset:
+                continue
             cache_testloader = f"/tmp/{dataset}_testloader_{model_name.replace('/', '_')}_all.cache"
             if os.path.exists(cache_testloader):
                 testloader = torch.load(cache_testloader)
@@ -148,16 +164,21 @@ def evaluate_model(
                 torch.save(testloader, cache_testloader)
             # print(dataset)
             testenc = testloader.input_ids
+            eval_seqlen = lm.seqlen
             if use_bos:
-                lm.seqlen -= 1
-            nsamples = testenc.numel() // lm.seqlen
+                eval_seqlen -= 1
+            nsamples = testenc.numel() // eval_seqlen
+            if 0 < eval_ppl_fraction < 1:
+                nsamples = max(1, int(nsamples * eval_ppl_fraction))
+            if limit > 0:
+                nsamples = min(nsamples, limit)
             use_cache = lm.model.config.use_cache
             lm.model.config.use_cache = False
             lm.model.eval()
             nlls = []
 
             for i in tqdm(range(nsamples)):
-                batch = testenc[:, (i * lm.seqlen) : ((i + 1) * lm.seqlen)].to(lm.device)
+                batch = testenc[:, (i * eval_seqlen) : ((i + 1) * eval_seqlen)].to(lm.device)
                 if use_bos:
                     bos_tokens_tensor = torch.tensor([[tokenizer.bos_token_id]] * batch.size(dim=0)).to(lm.device)
                     batch = torch.cat([bos_tokens_tensor, batch], dim=1)
@@ -167,16 +188,14 @@ def evaluate_model(
                     hidden_states = hidden_states[:, 1:, :]
                 logits = lm.model.lm_head(hidden_states)  # .contiguous()
                 shift_logits = logits[:, :-1, :]  # .contiguous()
-                shift_labels = testenc[:, (i * lm.seqlen) : ((i + 1) * lm.seqlen)][:, 1:].to(lm.device)
+                shift_labels = testenc[:, (i * eval_seqlen) : ((i + 1) * eval_seqlen)][:, 1:].to(lm.device)
                 loss_fct = nn.CrossEntropyLoss()
                 loss = loss_fct(
                     shift_logits.view(-1, shift_logits.size(-1)),
                     shift_labels.view(-1),
                 )
-                neg_log_likelihood = loss.float() * lm.seqlen
+                neg_log_likelihood = loss.float() * eval_seqlen
                 nlls.append(neg_log_likelihood)
-                if i == limit:
-                    break
                 # if i == 1:
                 #     print(
                 #         "memory_allocated",
@@ -186,7 +205,7 @@ def evaluate_model(
                 #         torch.cuda.max_memory_allocated() / 1024**2,
                 #     )
 
-            ppl = torch.exp(torch.stack(nlls).sum() / (len(nlls) * lm.seqlen))
+            ppl = torch.exp(torch.stack(nlls).sum() / (len(nlls) * eval_seqlen))
             print(dataset, ppl.item())
             lm.model.config.use_cache = use_cache
             results[dataset] = ppl.item()
@@ -208,6 +227,9 @@ def evaluate_model(
         # tasks = "boolq,piqa,hellaswag,winogrande,arc_easy,arc_challenge,openbookqa"
         tasks = "lambada_openai,openbookqa"
     if tasks != "":
+        HarnessEvalLM = _make_lm_eval_wrapper()
+        _, evaluator = _load_lm_eval()
+        lm = HarnessEvalLM(model, tokenizer, batch_size=batch_size)
         t_results = evaluator.simple_evaluate(
             lm,
             tasks=tasks.split(","),
